@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emotion Detector</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#5D5CDE',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="min-h-screen bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 transition-colors duration-200">
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <h1 class="text-3xl font-bold text-center mb-6 text-primary">Facial Emotion Detector</h1>
+        
+        <div class="flex flex-col md:flex-row gap-6">
+            <!-- Webcam and detection container -->
+            <div class="flex-1">
+                <div class="relative rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800 shadow-md">
+                    <video id="video" class="w-full" autoplay muted></video>
+                    <canvas id="overlay" class="absolute top-0 left-0 w-full h-full"></canvas>
+                    <div id="loading" class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 text-white">
+                        <div class="text-center">
+                            <div class="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+                            <p class="mt-2">Loading models...</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mt-4 flex justify-between items-center">
+                    <button id="toggleButton" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors disabled:opacity-50 text-base">
+                        Start Detection
+                    </button>
+                    <p id="status" class="text-sm italic">Ready to detect</p>
+                </div>
+            </div>
+            
+            <!-- Results container -->
+            <div class="flex-1 flex flex-col">
+                <div class="bg-gray-100 dark:bg-gray-800 rounded-lg p-6 mb-4 shadow-md">
+                    <h2 class="text-xl font-semibold mb-3">Current Emotion</h2>
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-lg font-semibold">
+                                <span id="emotion">Waiting...</span>
+                            </p>
+                            <p id="message" class="mt-2 italic">Start detection to see results</p>
+                        </div>
+                        <div id="emojiContainer" class="text-4xl">😐</div>
+                    </div>
+                </div>
+                
+                <div class="bg-gray-100 dark:bg-gray-800 rounded-lg p-6 flex-grow shadow-md">
+                    <h2 class="text-xl font-semibold mb-3">Emotion Statistics</h2>
+                    <div id="stats" class="space-y-2">
+                        <div class="flex justify-between items-center">
+                            <span>Happy: </span>
+                            <div class="flex items-center">
+                                <div class="bg-green-200 dark:bg-green-900 h-5 rounded" id="happyBar" style="width: 0%"></div>
+                                <span class="ml-2" id="happyCount">0</span>
+                            </div>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span>Sad: </span>
+                            <div class="flex items-center">
+                                <div class="bg-blue-200 dark:bg-blue-900 h-5 rounded" id="sadBar" style="width: 0%"></div>
+                                <span class="ml-2" id="sadCount">0</span>
+                            </div>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span>Angry: </span>
+                            <div class="flex items-center">
+                                <div class="bg-red-200 dark:bg-red-900 h-5 rounded" id="angryBar" style="width: 0%"></div>
+                                <span class="ml-2" id="angryCount">0</span>
+                            </div>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span>Fearful: </span>
+                            <div class="flex items-center">
+                                <div class="bg-purple-200 dark:bg-purple-900 h-5 rounded" id="fearfulBar" style="width: 0%"></div>
+                                <span class="ml-2" id="fearfulCount">0</span>
+                            </div>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span>Disgusted: </span>
+                            <div class="flex items-center">
+                                <div class="bg-yellow-200 dark:bg-yellow-900 h-5 rounded" id="disgustedBar" style="width: 0%"></div>
+                                <span class="ml-2" id="disgustedCount">0</span>
+                            </div>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span>Surprised: </span>
+                            <div class="flex items-center">
+                                <div class="bg-indigo-200 dark:bg-indigo-900 h-5 rounded" id="surprisedBar" style="width: 0%"></div>
+                                <span class="ml-2" id="surprisedCount">0</span>
+                            </div>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span>Neutral: </span>
+                            <div class="flex items-center">
+                                <div class="bg-gray-200 dark:bg-gray-700 h-5 rounded" id="neutralBar" style="width: 0%"></div>
+                                <span class="ml-2" id="neutralCount">0</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <p class="text-sm">Total detections: <span id="totalCount">0</span></p>
+                        <button id="resetStats" class="mt-2 px-3 py-1 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors text-sm">
+                            Reset Statistics
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Check for dark mode
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.classList.add('dark');
+        }
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+            if (event.matches) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        });
+
+        // DOM elements
+        const video = document.getElementById('video');
+        const overlay = document.getElementById('overlay');
+        const loading = document.getElementById('loading');
+        const toggleButton = document.getElementById('toggleButton');
+        const status = document.getElementById('status');
+        const emotionDisplay = document.getElementById('emotion');
+        const messageDisplay = document.getElementById('message');
+        const emojiContainer = document.getElementById('emojiContainer');
+        const resetStats = document.getElementById('resetStats');
+        const totalCount = document.getElementById('totalCount');
+
+        // Emotion stats
+        const stats = {
+            happy: 0,
+            sad: 0,
+            angry: 0,
+            fearful: 0,
+            disgusted: 0,
+            surprised: 0,
+            neutral: 0,
+            total: 0
+        };
+
+        // Messages for each emotion
+        const messages = {
+            happy: "You look happy! Keep smiling!",
+            sad: "Cheer up, things will get better!",
+            angry: "Take a deep breath, relax.",
+            fearful: "Don't worry, you're safe!",
+            disgusted: "Yuck! What's that smell?",
+            surprised: "Wow! That was unexpected!",
+            neutral: "Just another day, huh?"
+        };
+
+        // Emojis for each emotion
+        const emojis = {
+            happy: "😄",
+            sad: "😢",
+            angry: "😠",
+            fearful: "😨",
+            disgusted: "🤢",
+            surprised: "😲",
+            neutral: "😐"
+        };
+
+        // Detection variables
+        let isDetectionRunning = false;
+        let detectInterval = null;
+
+        // Initialize face-api.js
+        async function initFaceAPI() {
+            try {
+                toggleButton.disabled = true;
+                status.textContent = "Loading models...";
+                
+                // Load models from CDN
+                await faceapi.nets.tinyFaceDetector.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models');
+                await faceapi.nets.faceExpressionNet.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models');
+                
+                // Setup webcam
+                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    video.srcObject = stream;
+                    
+                    // Wait for video to be ready
+                    video.onloadedmetadata = () => {
+                        // Size the overlay to match the video
+                        overlay.width = video.videoWidth;
+                        overlay.height = video.videoHeight;
+                        
+                        loading.style.display = 'none';
+                        toggleButton.disabled = false;
+                        status.textContent = "Ready to detect";
+                    };
+                } else {
+                    throw new Error("Webcam not supported");
+                }
+            } catch (error) {
+                console.error("Error initializing:", error);
+                status.textContent = `Error: ${error.message}`;
+                loading.innerHTML = `<div class="text-center text-red-500">
+                    <p class="font-bold">Error</p>
+                    <p>${error.message}</p>
+                    <p class="text-sm mt-2">Note: Camera access requires permission</p>
+                </div>`;
+            }
+        }
+
+        // Start/stop detection
+        function toggleDetection() {
+            if (isDetectionRunning) {
+                // Stop detection
+                clearInterval(detectInterval);
+                isDetectionRunning = false;
+                toggleButton.textContent = "Start Detection";
+                status.textContent = "Detection paused";
+            } else {
+                // Start detection
+                isDetectionRunning = true;
+                toggleButton.textContent = "Stop Detection";
+                status.textContent = "Detecting...";
+                
+                detectInterval = setInterval(detectEmotion, 500);
+            }
+        }
+
+        // Detect emotion
+        async function detectEmotion() {
+            try {
+                const detections = await faceapi.detectAllFaces(
+                    video, 
+                    new faceapi.TinyFaceDetectorOptions()
+                ).withFaceExpressions();
+                
+                // Clear the canvas
+                const ctx = overlay.getContext('2d');
+                ctx.clearRect(0, 0, overlay.width, overlay.height);
+                
+                if (detections.length > 0) {
+                    // Draw detection results
+                    faceapi.draw.drawDetections(overlay, detections);
+                    
+                    // Get the first detected face
+                    const face = detections[0];
+                    
+                    // Find the most prominent expression
+                    let maxExpression = "neutral";
+                    let maxValue = 0;
+                    
+                    for (const [expression, value] of Object.entries(face.expressions)) {
+                        if (value > maxValue) {
+                            maxValue = value;
+                            maxExpression = expression;
+                        }
+                    }
+                    
+                    // Update UI
+                    emotionDisplay.textContent = maxExpression.charAt(0).toUpperCase() + maxExpression.slice(1);
+                    messageDisplay.textContent = messages[maxExpression];
+                    emojiContainer.textContent = emojis[maxExpression];
+                    
+                    // Update stats
+                    stats[maxExpression]++;
+                    stats.total++;
+                    updateStats();
+                } else {
+                    emotionDisplay.textContent = "No face detected";
+                    messageDisplay.textContent = "Make sure your face is visible";
+                    emojiContainer.textContent = "🔍";
+                }
+            } catch (error) {
+                console.error("Detection error:", error);
+                status.textContent = `Error: ${error.message}`;
+            }
+        }
+
+        // Update statistics display
+        function updateStats() {
+            totalCount.textContent = stats.total;
+            
+            // Update each emotion bar
+            for (const emotion of ['happy', 'sad', 'angry', 'fearful', 'disgusted', 'surprised', 'neutral']) {
+                const count = stats[emotion];
+                const percentage = stats.total > 0 ? (count / stats.total) * 100 : 0;
+                
+                document.getElementById(`${emotion}Count`).textContent = count;
+                document.getElementById(`${emotion}Bar`).style.width = `${percentage}%`;
+            }
+        }
+
+        // Reset statistics
+        function resetStatistics() {
+            for (const key in stats) {
+                stats[key] = 0;
+            }
+            updateStats();
+        }
+
+        // Event listeners
+        window.addEventListener('load', initFaceAPI);
+        toggleButton.addEventListener('click', toggleDetection);
+        resetStats.addEventListener('click', resetStatistics);
+    </script>
+</body>
+</html>
